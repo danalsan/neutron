@@ -96,6 +96,17 @@ SERVICE_PLUGINS_REQUIRED_DRIVERS = {
 }
 
 
+def profiled(fun):
+    from eventlet.green import profile
+
+    def inner(*args, **kwargs):
+        prof = profile.Profile()
+        prof.runcall(fun, *args, **kwargs)
+        file_name = './%s.profile' % fun.__name__
+        prof.dump_stats(file_name)
+    return inner
+
+
 class Ml2Plugin(db_base_plugin_v2.NeutronDbPluginV2,
                 dvr_mac_db.DVRDbMixin,
                 external_net_db.External_net_db_mixin,
@@ -1271,6 +1282,7 @@ class Ml2Plugin(db_base_plugin_v2.NeutronDbPluginV2,
         self._apply_dict_extend_functions('ports', result, port_db)
         return result, mech_context
 
+    @profiled
     @utils.transaction_guard
     @db_api.retry_if_session_inactive()
     def create_port(self, context, port):
