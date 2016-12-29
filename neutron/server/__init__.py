@@ -16,12 +16,44 @@
 # If ../neutron/__init__.py exists, add ../ to Python search path, so that
 # it will override what happens to be installed in /usr/(local/)lib/python...
 
+from datetime import datetime
+import os
+import signal
 import sys
 
+from eventlet.green import profile
 from oslo_config import cfg
+from oslo_log import log as logging
 
 from neutron._i18n import _
 from neutron.common import config
+
+LOG = logging.getLogger(__name__)
+
+prof_running = False
+prof = profile.Profile()
+
+
+def _toggle_profiler():
+    global prof, prof_running
+    if not prof:
+        prof = profile.Profile()
+
+    if prof_running:
+        LOG.warning('Stopping profiler')
+        prof.stop()
+        prof.dump_stats('/tmp/prof_%s_%s.prof' %
+                        (datetime.now().strftime('%y%m%d%H%M%S'),
+                         os.getpid())
+        prof.print_stats()
+    else:
+        LOG.warning('Starting profiler')
+        prof.start()
+    prof_running = not prof_running
+
+
+def _handle_sigusr2(signum, frame):
+    _toggle_profiler()
 
 
 def boot_server(server_func):
@@ -33,6 +65,9 @@ def boot_server(server_func):
         sys.exit(_("ERROR: Unable to find configuration file via the default"
                    " search paths (~/.neutron/, ~/, /etc/neutron/, /etc/) and"
                    " the '--config-file' option!"))
+
+    signal.signal(signal.SIGUSR2, _handle_sigusr2)
+
     try:
         server_func()
     except KeyboardInterrupt:
